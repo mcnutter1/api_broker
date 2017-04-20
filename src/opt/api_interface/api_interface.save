@@ -1,0 +1,258 @@
+#!/usr/bin/perl -w
+use IO::Socket::INET;
+use IO::Select();
+use XML::Simple;
+use Data::Dumper;
+use XML::Parser;
+use Storable;
+use Digest::SHA1  qw(sha1 sha1_hex sha1_base64);
+use Time::HiRes qw(time);
+use POSIX;
+
+my $VERSION = "1.1";
+my $PORT = "5050";
+my $XML_HEADER = "/<\?xml version=\"1.0\"\?>/";
+my $HTTP_RESPONSE_OK_HEADER = "HTTP/1.0 200 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
+my $HTTP_RESPONSE_403_HEADER = "HTTP/1.0 403 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
+my $HTTP_RESPONSE_500_HEADER = "HTTP/1.0 500 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
+my $MODE = $ARGV[0];
+my $PARAMS = $ARGV[1]; 
+my $API_KEY_DB = "/opt/api_interface/api_key.db";
+my %PLUGINS;
+my %PLUGIN_INITIATORS;
+
+
+
+
+my $LOG_FILE = "/var/log/API_runner.log";
+
+
+my %API_KEYS = ( );
+
+# auto-flush on socket
+$| = 1;
+
+sub activate_plugin {
+
+	my $params = shift;
+
+	$PLUGINS{$params->{name}}{status} = "active";
+	$PLUGINS{$params->{name}}{initiator} = $params->{initiator};
+	$PLUGINS{$params->{name}}{call_back} = $params->{call_back};
+
+	$PLUGIN_INITIATORS{$params->{initiator}} = $params->{name};
+
+	log_entry({level=>"INFO", message=>"Activated plugin [$params->{name}] which provides the following initiator [$params->{initiator}]"}); 
+}
+
+sub load_plugins {
+	log_entry({message=>"Loading Plugins",level=>"INFO"});
+	if (-d "/opt/api_interface/plugins") {
+	 	opendir my $dir, "/opt/api_interface/plugins/";
+        	my @found_plugins = readdir $dir;
+        	closedir $dir;
+
+	        foreach my $found_plugin (@found_plugins) {
+
+        	        $qualified_lib = "plugins/$found_plugin";
+
+                	if (-f "/opt/api_interface/plugins/$found_plugin") {
+                        	log_entry({message=>"Loading Plugin from file [$found_plugin]",level=>"INFO"});
+                        	require $qualified_lib;
+                	}
+        	}
+	}
+}
+
+sub log_entry {
+
+	my $params = shift;
+	my $message = $params->{message};
+	my $level = $params->{level};
+
+	open(my $fh, '>>', $LOG_FILE) or die "Could not open file '$LOG_FILE' $!";
+	print $fh "\n" .localtime() . " - [$level] - " . $message;
+	close $fh; 
+
+}
+
+
+sub load_api_key_db {
+
+	if (-e $API_KEY_DB) {
+		$api_key_db_ref = retrieve($API_KEY_DB);
+		%API_KEYS = %{$api_key_db_ref};
+		
+	} else {
+		print "API Key DB not found\n";
+		exit(1);
+	}
+}
+
+sub add_api_key_to_db {
+	
+	print "Generating API Key\n";
+	$api_key = sha1_base64($PARAMS);
+	print "API Key: $api_key\n\n";
+
+	$API_KEYS{$api_key} = $PARAMS;
+	store \%API_KEYS, $API_KEY_DB;
+}
+
+sub handle_packet {
+
+	my %headers;
+	my $socket = new IO::Socket::INET (
+    	LocalHost => '0.0.0.0',
+    	LocalPort => $PORT,
+    	Proto => 'tcp',
+    	Listen => 5,
+    	Reuse => 1
+	);
+	die "cannot create socket $!\n" unless $socket;
+	log_entry({level=>"INFO",message=>"Server started, listening on port $PORT"});
+	while(1) {
+		my %response;
+    		# waiting for a new client connection
+    		my $client_socket = $socket->accept();
+ 		my $start_ms_time = time();
+		print $start_ms_time;
+    		my $client_address = $client_socket->peerhost();
+    		my $client_port = $client_socket->peerport();
+		log_entry({level=>"INFO",message=>"[$client_address] client connected, source port: $client_port"});
+ 
+    		my $data = "";
+    		$client_socket->recv($data, 10024);
+		log_entry({level=>"DEBUG",message=>"[$client_address] received request: $data"}) if ($PARAMS eq "debug");
+	
+		if ($data =~ /POST/) {		
+		
+			my ($header,$body) = split(/<\?xml version=\"1.0\"\?>/, $data);
+			$header_pos = 1;
+			foreach my $header_line (split(/[\r\n(\r\n)]/,$header)) {
+				$headers {method} = $header_line if $header_pos eq 1;
+				my ($header_key, $header_value) = split(": ", $header_line);
+				$headers{$header_key} = $header_value;
+				$header_pos++;
+			}
+
+			if ($body) {
+    				my $hashref = XMLin($body);
+				my $request_api_key = $hashref->{authentication}->{apikey};
+				if ($API_KEYS{$request_api_key}) {
+
+					log_entry({level=>"INFO",message=>"[$client_address] Authenticated by $API_KEYS{$request_api_key}"});
+					foreach my $initiator (keys %{$hashref}) {
+					
+						if ($PLUGIN_INITIATORS{$initiator}) {
+
+							$response{$initiator} = [$PLUGINS{$PLUGIN_INITIATORS{$initiator}}{call_back}->($hashref->{$initiator})];
+
+						}
+					}
+
+			
+                			$data = $HTTP_RESPONSE_OK_HEADER;
+				} else {
+					log_entry({level=>"CLIENT_WARNING",message=>"[$client_address] failed authentication using API KEY [$request_api_key]"});
+					$response{'error'} = "Invalid API key";
+					$data = $HTTP_RESPONSE_403_HEADER;			
+				}
+			} else {
+				log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
+				$data = $HTTP_RESPONSE_500_HEADER;
+			}
+			my $complete_ms_time = time();
+        		my $time_elapsed = $complete_ms_time - $start_ms_time;
+        		$response{"elapsed_time"} = "$time_elapsed s";
+			my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
+                       	my $xml = $xs->XMLout(\%response);
+			log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");;
+			$data = $data . $xml;
+		} else {
+			log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
+			$data = $HTTP_RESPONSE_500_HEADER;
+		}
+
+    	# write response data to the connected client
+    	$client_socket->send($data);
+ 
+    	# notify client that response has been sent
+    	shutdown($client_socket, 1);
+	%response = ();
+	}
+ 	
+	$socket->close();
+
+}
+
+
+
+if ($MODE eq "add_api_key") {
+
+	load_api_key_db();
+	add_api_key_to_db($PARAMS);
+	
+}
+
+if ($MODE eq "print_api_keys") {
+
+        load_api_key_db();
+
+	print Dumper(\%API_KEYS);
+}
+
+if ($MODE eq "init_db") {
+
+	store \%API_KEYS, $API_KEY_DB;
+	
+}
+
+if ($MODE eq "daemon") {
+
+	daemonize();
+	print "Started McNutter API version $VERSION\n\nLogging output to $LOG_FILE\n";	
+	log_entry({level=>"INFO",message=>"Daemon Mode Started"});
+	load_plugins();
+	load_api_key_db();
+
+	my $server = handle_packet();
+
+	my $select = new IO::Select();
+	$select->add($server);
+
+
+}
+
+
+sub daemonize {
+   use POSIX;
+   POSIX::setsid or die "setsid: $!";
+   my $pid = fork ();
+   if ($pid < 0) {
+      die "fork: $!";
+   } elsif ($pid) {
+      exit 0;
+   }
+#   chdir "/";
+   umask 0;
+   foreach (0 .. (POSIX::sysconf (&POSIX::_SC_OPEN_MAX) || 1024))
+      { POSIX::close $_ }
+   open (STDIN, "</dev/null");
+   open (STDOUT, ">/dev/null");
+   open (STDERR, ">&STDOUT");
+ }
+
+
+sub daemonize2
+{
+    
+    fork and exit;
+    POSIX::setsid();
+    fork and exit;
+    umask 0;
+    chdir '/';
+    close STDIN;
+    close STDOUT;
+    close STDERR;
+}
