@@ -1,0 +1,8 @@
+{
+ "configuration":
+    {
+        "port":"5050",
+        "log_file":"/var/log/api_interface.log",
+	"log_file_stdout":"/var/log/api_interface.stdout"
+    }
+}

@@ -2,28 +2,39 @@
 use IO::Socket::INET;
 use IO::Select();
 use XML::Simple;
+use JSON;
 use Data::Dumper;
 use XML::Parser;
 use Storable;
 use Digest::SHA1  qw(sha1 sha1_hex sha1_base64);
 use Time::HiRes qw(time);
 use POSIX;
+use Getopt::Std;
+
 
 my $VERSION = "1.1";
 my $PORT = "5050";
 my $XML_HEADER = "/<\?xml version=\"1.0\"\?>/";
 my $HTTP_RESPONSE_OK_HEADER = "HTTP/1.0 200 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
 my $HTTP_RESPONSE_403_HEADER = "HTTP/1.0 403 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
+my $HTTP_RESPONSE_404_HEADER = "HTTP/1.0 404 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
 my $HTTP_RESPONSE_500_HEADER = "HTTP/1.0 500 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
-my $MODE = $ARGV[0];
-my $PARAMS = $ARGV[1]; 
+
+
+my %OPTIONS=();
+getopts("c:m:z:", \%OPTIONS);
+
+my $MODE = $OPTIONS{m};
+my $PARAMS = $OPTIONS{z}; 
 my $API_KEY_DB = "/opt/api_interface/api_key.db";
+my $CONFIGURATION_FILE = $OPTIONS{c};;
+my %CONFIG;
 my %PLUGINS;
 my %PLUGIN_INITIATORS;
 
 my $CONTROLLERS_CB = {
 			"/status" => "status_controller_cb",
-			"/api" => "api_controller_cb"
+			"/request" => "request_controller_cb"
 
 			};
 
@@ -34,6 +45,20 @@ my %API_KEYS = ( );
 
 # auto-flush on socket
 $| = 1;
+
+sub read_configuration {
+
+	my $json_text = do {
+   		open(my $json_fh, "<:encoding(UTF-8)", $CONFIGURATION_FILE) or die("Can't open \$filename\": $!\n");
+   		local $/;
+   		<$json_fh>
+	};
+
+	my $json = JSON->new;
+	my $data = $json->decode($json_text);
+	%CONFIG = %{$data->{configuration}};
+}
+
 
 sub activate_plugin {
 
@@ -73,7 +98,7 @@ sub log_entry {
 	my $message = $params->{message};
 	my $level = $params->{level};
 
-	open(my $fh, '>>', $LOG_FILE) or die "Could not open file '$LOG_FILE' $!";
+	open(my $fh, '>>', $CONFIG{log_file}) or die "Could not open file '$CONFIG{log_file}' $!";
 	print $fh "\n" .localtime() . " - [$level] - " . $message;
 	close $fh; 
 
@@ -107,7 +132,7 @@ sub handle_packet {
 	my %headers;
 	my $socket = new IO::Socket::INET (
     	LocalHost => '0.0.0.0',
-    	LocalPort => $PORT,
+    	LocalPort => $CONFIG{port},
     	Proto => 'tcp',
     	Listen => 5,
     	Reuse => 1
@@ -119,7 +144,6 @@ sub handle_packet {
     		# waiting for a new client connection
     		my $client_socket = $socket->accept();
  		my $start_ms_time = time();
-		print $start_ms_time;
     		my $client_address = $client_socket->peerhost();
     		my $client_port = $client_socket->peerport();
 		log_entry({level=>"INFO",message=>"[$client_address] client connected, source port: $client_port"});
@@ -141,32 +165,46 @@ sub handle_packet {
 
 		log_entry({level=>"INFO",message=>"[$client_address] client accessed $path"});
 
-		if ($method eq "GET") {
+		if ($method eq "GET" || $method eq "POST") {
 
-			log_entry({level=>"DEBUG",message=>"[$client_address] received GET request: $data"}) if ($PARAMS eq "debug");
-			if ($CONTROLLERS_CB->{$path}) { log_entry({level=>"DEBUG",message=>"[$client_address] matched controller for $path"}) if ($PARAMS eq "debug"); }
-			my $controller = $CONTROLLERS_CB->{$path}->({client_address=>"$client_address"}) if $CONTROLLERS_CB->{$path};
+			log_entry({level=>"DEBUG",message=>"[$client_address] received $method request: $data"}) if ($PARAMS eq "debug");
+
+			if ($CONTROLLERS_CB->{$path}) { 
 			
-			if ($controller->{success}) {
+				log_entry({level=>"DEBUG",message=>"[$client_address] matched controller for $path"}) if ($PARAMS eq "debug"); 
 
-				$data = $HTTP_RESPONSE_OK_HEADER;
+				my $controller = $CONTROLLERS_CB->{$path}->({client_address=>$client_address, method=>$method, body=>$body}) if $CONTROLLERS_CB->{$path};
+			
+				if ($controller->{success}) {
 
-				$response{"response"} = $controller->{response};
-				my $complete_ms_time = time();
-                        	my $time_elapsed = $complete_ms_time - $start_ms_time;
-                        	$response{"elapsed_time"} = "$time_elapsed s";
+					$data = $HTTP_RESPONSE_OK_HEADER;
+
+					$response{"response"} = $controller->{response};
+					my $complete_ms_time = time();
+                	        	my $time_elapsed = $complete_ms_time - $start_ms_time;
+                        		$response{"elapsed_time"} = "$time_elapsed s";
+
+				} else {
+					 $data = $HTTP_RESPONSE_500_HEADER;
+					 $response{'error'} = $controller->{error} || "Controller did not return success";					 
+				}
 
 			} else {
-				 $data = $HTTP_RESPONSE_500_HEADER;
+				$data = $HTTP_RESPONSE_404_HEADER;
+				$response{'error'} = "Unknown controller";
 			}
 
-                        my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
+			my $complete_ms_time = time();
+                        my $time_elapsed = $complete_ms_time - $start_ms_time;
+                        $response{"elapsed_time"} = "$time_elapsed s";
+
+			my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
                         my $xml = $xs->XMLout(\%response);
-                        log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");;
+                        log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");
                         $data = $data . $xml;
 		}
 
-		elsif ($method eq "POST") {		
+		elsif ($method eq "FOO") {		
 			log_entry({level=>"DEBUG",message=>"[$client_address] received POST request: $data"}) if ($PARAMS eq "debug");
 
 			if ($body) {
@@ -200,14 +238,22 @@ sub handle_packet {
         		$response{"elapsed_time"} = "$time_elapsed s";
 			my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
                        	my $xml = $xs->XMLout(\%response);
-			log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");;
+			log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");
 			$data = $data . $xml;
 
 
 		} else {
-			log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
+			log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] used unsupported method"});
+			$response{error} = "unsupported method";
 			$data = $HTTP_RESPONSE_500_HEADER;
+			my $complete_ms_time = time();
+                        my $time_elapsed = $complete_ms_time - $start_ms_time;
+                        $response{"elapsed_time"} = "$time_elapsed s";
+                        my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
+                        my $xml = $xs->XMLout(\%response);
+                        $data = $data . $xml;
 		}
+	
 
     	# write response data to the connected client
     	$client_socket->send($data);
@@ -228,11 +274,54 @@ sub status_controller_cb {
 	log_entry({level=>"DEBUG",message=>"[$client_address] entered status controller callback function"});
 	
 	my $response;
-	$response->{success} = "true";
-	$response->{response}->{status} = "Service OK"; 
+
+	if ($params->{method} eq "GET") {
+		$response->{success} = "true";
+		$response->{response}->{status} = "Service OK"; 
+	
+	} else {
+		$response->{error} = "Bad method";
+	}
 	return $response;
 }
 
+
+sub request_controller_cb {
+        $params = shift;
+        $client_address = $params->{client_address};
+        log_entry({level=>"DEBUG",message=>"[$client_address] entered request controller callback function"});
+
+	my $response;
+	if ($params->{body} && $params->{method} eq "POST") {
+                                my $hashref = XMLin($params->{body});
+                                my $request_api_key = $hashref->{authentication}->{apikey};
+                                if ($API_KEYS{$request_api_key}) {
+
+                                        log_entry({level=>"INFO",message=>"[$client_address] Authenticated by $API_KEYS{$request_api_key}"});
+                                        foreach my $initiator (keys %{$hashref}) {
+
+                                                if ($PLUGIN_INITIATORS{$initiator}) {
+
+                                                        $response->{response}->{$initiator} = [$PLUGINS{$PLUGIN_INITIATORS{$initiator}}{call_back}->($hashref->{$initiator})];
+
+                                                }
+                                        }
+
+					$response->{success} = "true";
+                                        $data = $HTTP_RESPONSE_OK_HEADER;
+                                } else {
+                                        log_entry({level=>"CLIENT_WARNING",message=>"[$client_address] failed authentication using API KEY [$request_api_key]"});
+                                        $response->{error} = "Invalid API key";
+                                        $data = $HTTP_RESPONSE_403_HEADER;
+                                }
+                        } else {
+                                log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
+                                $response->{error} = "Invalid data sent";
+				$data = $HTTP_RESPONSE_500_HEADER;
+                        }
+
+        return $response;
+}
 
 
 
@@ -257,10 +346,17 @@ if ($MODE eq "init_db") {
 	
 }
 
+if ($MODE eq "dump_config") {
+
+	read_configuration();
+	print Dumper(\%CONFIG);
+}
+
 if ($MODE eq "daemon") {
 
-#	daemonize();
-	print "Started McNutter API version $VERSION\n\nLogging output to $LOG_FILE\n";	
+	daemonize();
+	read_configuration();
+	print "Started McNutter API version $VERSION\n\nLogging output to $CONFIG{log_file}\n";	
 	log_entry({level=>"INFO",message=>"Daemon Mode Started"});
 	load_plugins();
 	load_api_key_db();
@@ -297,8 +393,8 @@ sub daemonize {
    foreach (0 .. (POSIX::sysconf (&POSIX::_SC_OPEN_MAX) || 1024))
       { POSIX::close $_ }
    open (STDIN, "</dev/null");
-   open (STDOUT, ">/dev/null");
-   open (STDERR, ">&STDOUT");
+   open (STDOUT, ">>$CONFIG{log_file_stdout}");
+   open (STDERR, ">>$CONFIG{log_file_stdout}");
  }
 
 

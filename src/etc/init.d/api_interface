@@ -15,12 +15,12 @@
 DESC="McNutter API"
 PATH=/sbin:/usr/sbin:/bin:/usr/bin
 NAME=api_interface
-DAEMON_ARGS="daemon"
+DAEMON_ARGS="-m daemon -c /opt/api_interface/configuration.json"
 PIDFILE=/var/run/$NAME.pid
 SCRIPTNAME=/etc/init.d/$NAME
 DAEMON_PATH="/usr/bin/"
 DAEMON=$NAME
-DAEMONOPTS="daemon"
+DAEMONOPTS="-m daemon -c /opt/api_interface/configuration.json"
 
 
 case "$1" in
@@ -36,6 +36,20 @@ start)
             printf "%s\n" "Ok"
         fi
 ;;
+
+start_debug)
+        printf "%-50s" "Starting $NAME..."
+        cd $DAEMON_PATH
+        PID=`$DAEMON $DAEMONOPTS -z debug > /dev/null 2>&1 & echo $!`
+        #echo "Saving PID" $PID " to " $PIDFILE
+        if [ -z $PID ]; then
+            printf "%s\n" "Fail"
+        else
+            echo $PID > $PIDFILE
+            printf "%s\n" "Ok"
+        fi
+;;
+
 status)
         printf "%-50s" "Checking $NAME..."
         if [ -f $PIDFILE ]; then
