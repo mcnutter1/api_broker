@@ -10,15 +10,10 @@ use Digest::SHA1  qw(sha1 sha1_hex sha1_base64);
 use Time::HiRes qw(time);
 use POSIX;
 use Getopt::Std;
+use HTTP::Request;
+use HTTP::Response;
 
-
-my $VERSION = "1.1";
-my $PORT = "5050";
-my $XML_HEADER = "/<\?xml version=\"1.0\"\?>/";
-my $HTTP_RESPONSE_OK_HEADER = "HTTP/1.0 200 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
-my $HTTP_RESPONSE_403_HEADER = "HTTP/1.0 403 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
-my $HTTP_RESPONSE_404_HEADER = "HTTP/1.0 404 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
-my $HTTP_RESPONSE_500_HEADER = "HTTP/1.0 500 OK\nServer: McNutter API Command Runner/$VERSION\nConnection: close\nContent-Type: text/xml\n\n";
+my $VERSION = "1.2";
 
 
 my %OPTIONS=();
@@ -34,11 +29,11 @@ my %PLUGIN_INITIATORS;
 
 my $CONTROLLERS_CB = {
 			"/status" => "status_controller_cb",
-			"/request" => "request_controller_cb"
+			"/request" => "request_controller_cb",
+			"/config" => "config_controller_cb"
 
 			};
 
-my $LOG_FILE = "/var/log/API_runner.log";
 
 
 my %API_KEYS = ( );
@@ -138,7 +133,7 @@ sub handle_packet {
     	Reuse => 1
 	);
 	die "cannot create socket $!\n" unless $socket;
-	log_entry({level=>"INFO",message=>"Server started, listening on port $PORT"});
+	log_entry({level=>"INFO",message=>"Server started, listening on port $CONFIG{port}"});
 	while(1) {
 		my %response;
     		# waiting for a new client connection
@@ -149,19 +144,17 @@ sub handle_packet {
 		log_entry({level=>"INFO",message=>"[$client_address] client connected, source port: $client_port"});
  
     		my $data = "";
+		my $XML = "";
+		my $JSON = "";
+		my $CODE = "";
     		$client_socket->recv($data, 10024);
+		
+		my $http_request = my $request = HTTP::Request->parse($data);
+		my $path = $http_request->uri();
+		my $method = $http_request->method;
+		my $content = $http_request->content;		
+		my $headers = $http_request->headers;
 	
-
-		my ($header,$body) = split(/<\?xml version=\"1.0\"\?>/, $data);
-                        $header_pos = 1;
-                        foreach my $header_line (split(/[\r\n(\r\n)]/,$header)) {
-                                $headers{method} = $header_line if $header_pos eq 1;
-                         	
-			        my ($header_key, $header_value) = split(": ", $header_line);
-                                $headers{$header_key} = $header_value;
-                                $header_pos++;
-                        }
-		my ($method, $path, $protocol) = split(/\s/,$headers{method});
 
 		log_entry({level=>"INFO",message=>"[$client_address] client accessed $path"});
 
@@ -173,24 +166,24 @@ sub handle_packet {
 			
 				log_entry({level=>"DEBUG",message=>"[$client_address] matched controller for $path"}) if ($PARAMS eq "debug"); 
 
-				my $controller = $CONTROLLERS_CB->{$path}->({client_address=>$client_address, method=>$method, body=>$body}) if $CONTROLLERS_CB->{$path};
+				my $payload_hash = parse_payload({payload=>$content,client_address=>$client_address,content_type=>$headers->{'content-type'}}); 
+				my $controller = $CONTROLLERS_CB->{$path}->({client_address=>$client_address, method=>$method, body=>$content}) if $CONTROLLERS_CB->{$path};
 			
 				if ($controller->{success}) {
 
-					$data = $HTTP_RESPONSE_OK_HEADER;
-
+					$CODE = "200";
 					$response{"response"} = $controller->{response};
 					my $complete_ms_time = time();
                 	        	my $time_elapsed = $complete_ms_time - $start_ms_time;
                         		$response{"elapsed_time"} = "$time_elapsed s";
 
 				} else {
-					 $data = $HTTP_RESPONSE_500_HEADER;
+					 $CODE = $controller->{'error_code'} || "500";
 					 $response{'error'} = $controller->{error} || "Controller did not return success";					 
 				}
 
 			} else {
-				$data = $HTTP_RESPONSE_404_HEADER;
+				$CODE = "404";
 				$response{'error'} = "Unknown controller";
 			}
 
@@ -199,64 +192,36 @@ sub handle_packet {
                         $response{"elapsed_time"} = "$time_elapsed s";
 
 			my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
-                        my $xml = $xs->XMLout(\%response);
-                        log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");
-                        $data = $data . $xml;
-		}
-
-		elsif ($method eq "FOO") {		
-			log_entry({level=>"DEBUG",message=>"[$client_address] received POST request: $data"}) if ($PARAMS eq "debug");
-
-			if ($body) {
-    				my $hashref = XMLin($body);
-				my $request_api_key = $hashref->{authentication}->{apikey};
-				if ($API_KEYS{$request_api_key}) {
-
-					log_entry({level=>"INFO",message=>"[$client_address] Authenticated by $API_KEYS{$request_api_key}"});
-					foreach my $initiator (keys %{$hashref}) {
-					
-						if ($PLUGIN_INITIATORS{$initiator}) {
-
-							$response{$initiator} = [$PLUGINS{$PLUGIN_INITIATORS{$initiator}}{call_back}->($hashref->{$initiator})];
-
-						}
-					}
-
-			
-                			$data = $HTTP_RESPONSE_OK_HEADER;
-				} else {
-					log_entry({level=>"CLIENT_WARNING",message=>"[$client_address] failed authentication using API KEY [$request_api_key]"});
-					$response{'error'} = "Invalid API key";
-					$data = $HTTP_RESPONSE_403_HEADER;			
-				}
-			} else {
-				log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
-				$data = $HTTP_RESPONSE_500_HEADER;
-			}
-			my $complete_ms_time = time();
-        		my $time_elapsed = $complete_ms_time - $start_ms_time;
-        		$response{"elapsed_time"} = "$time_elapsed s";
-			my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
-                       	my $xml = $xs->XMLout(\%response);
+                        $xml = $xs->XMLout(\%response);
+                        $JSON = encode_json \%response;
 			log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");
-			$data = $data . $xml;
-
+                        $data = $data . $xml;
+		
 
 		} else {
 			log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] used unsupported method"});
 			$response{error} = "unsupported method";
-			$data = $HTTP_RESPONSE_500_HEADER;
+			$CODE = "500";
 			my $complete_ms_time = time();
                         my $time_elapsed = $complete_ms_time - $start_ms_time;
                         $response{"elapsed_time"} = "$time_elapsed s";
                         my $xs  = XML::Simple->new(ForceArray => 1, KeepRoot => 0, XMLDecl => 1,RootName => "response");
-                        my $xml = $xs->XMLout(\%response);
+                        $xml = $xs->XMLout(\%response);
                         $data = $data . $xml;
 		}
 	
 
+	my $return_content;
+	if (content_type=>$headers->{'accept'} eq "application/json") {
+
+		$return_content = $JSON;
+	} else {
+		$return_content = $xml
+	}
+	
+	$response_message = form_http_response({content=>"$return_content",code=>$CODE, content_type=>$headers->{'accept'}});
     	# write response data to the connected client
-    	$client_socket->send($data);
+    	$client_socket->send($response_message);
  
     	# notify client that response has been sent
     	shutdown($client_socket, 1);
@@ -268,6 +233,42 @@ sub handle_packet {
 }
 
 
+sub parse_payload {
+
+
+	my $params = shift;
+
+	my $payload = $params->{payload};
+	my $content_type = $params->{content_type};
+	my $client_address =$params->{client_address};
+	
+	if ($content_type eq "application/xml") {		
+		log_entry({level=>"DEBUG",message=>"[$client_address] parsing payload $payload as XML"}) if ($PARAMS eq "debug");	
+	} elsif ($content_type eq "application/json") {
+		log_entry({level=>"DEBUG",message=>"[$client_address] parsing payload $payload as JSON"}) if ($PARAMS eq "debug");
+	} else {
+		log_entry({level=>"DEBUG",message=>"[$client_address] parsing payload $payload as XML because no content-type was specifiied in request"}) if ($PARAMS eq "debug");
+
+	}
+}
+
+
+sub form_http_response {
+	my $params = shift;
+	my $respbody = $params->{content};
+	my $code = $params->{code};
+	my $content_type = $params->{content_type};
+	$response = HTTP::Response->new($code,'Ok');
+	$response->header( 'Content-type' => $content_type );
+#	$response->header( 'Content-type' => 'application/json' );
+	$response->header( 'Cache-control' => 'no-cache, must-revalidate' );	
+	$response->header( 'Content-length' => length($respbody) );
+	$response->header( 'Server' => "McNutter API Command Runner/$VERSION");
+	$response->content($respbody);
+
+	return $response->as_string;
+
+}
 sub status_controller_cb {
 	$params = shift;
 	$client_address = $params->{client_address};
@@ -308,16 +309,56 @@ sub request_controller_cb {
                                         }
 
 					$response->{success} = "true";
-                                        $data = $HTTP_RESPONSE_OK_HEADER;
                                 } else {
                                         log_entry({level=>"CLIENT_WARNING",message=>"[$client_address] failed authentication using API KEY [$request_api_key]"});
                                         $response->{error} = "Invalid API key";
-                                        $data = $HTTP_RESPONSE_403_HEADER;
+                                	$response->{error_code} = "403";
                                 }
                         } else {
                                 log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
                                 $response->{error} = "Invalid data sent";
-				$data = $HTTP_RESPONSE_500_HEADER;
+                        }
+
+        return $response;
+}
+
+
+sub config_controller_cb {
+        $params = shift;
+        $client_address = $params->{client_address};
+        log_entry({level=>"DEBUG",message=>"[$client_address] entered config controller callback function"});
+
+        my $response;
+        if ($params->{body} && $params->{method} eq "POST") {
+                                my $hashref = XMLin($params->{body});
+                                my $request_api_key = $hashref->{authentication}->{apikey};
+                                if ($API_KEYS{$request_api_key}) {
+
+                                        log_entry({level=>"INFO",message=>"[$client_address] Authenticated by $API_KEYS{$request_api_key}"});
+
+                                        foreach my $initiator (keys %{$hashref}) {
+
+
+						if ($initiator eq "command" && $hashref->{$initiator}->{content} eq "show config") {
+							$response->{response}{configuration} = \%CONFIG; 
+						}
+
+						if ($initiator eq "command" && $hashref->{$initiator}->{content} eq "show api keys") {
+                                                        $response->{response}{configuration} = \%API_KEYS;
+                                                }
+					
+						
+                                        }
+
+                                        $response->{success} = "true";
+                                } else {
+                                        log_entry({level=>"CLIENT_WARNING",message=>"[$client_address] failed authentication using API KEY [$request_api_key]"});
+                                        $response->{error} = "Invalid API key";
+                                        $response->{error_code} = "403";
+                                }
+                        } else {
+                                log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] failed to send the right data"});
+                                $response->{error} = "Invalid data sent";
                         }
 
         return $response;
@@ -369,6 +410,22 @@ if ($MODE eq "daemon") {
 
 }
 
+if ($MODE eq "server") {
+
+        read_configuration();
+        print "Started McNutter API version $VERSION\n\nLogging output to $CONFIG{log_file}\n";
+        log_entry({level=>"INFO",message=>"Daemon Mode Started"});
+        load_plugins();
+        load_api_key_db();
+
+        my $server = handle_packet();
+
+        my $select = new IO::Select();
+        $select->add($server);
+
+
+}
+
 
 
 
@@ -398,15 +455,3 @@ sub daemonize {
  }
 
 
-sub daemonize2
-{
-    
-    fork and exit;
-    POSIX::setsid();
-    fork and exit;
-    umask 0;
-    chdir '/';
-    close STDIN;
-    close STDOUT;
-    close STDERR;
-}
