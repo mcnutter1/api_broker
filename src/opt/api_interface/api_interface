@@ -12,6 +12,7 @@ use POSIX;
 use Getopt::Std;
 use HTTP::Request;
 use HTTP::Response;
+use UUID::Tiny ':std';
 
 my $VERSION = "1.2";
 
@@ -185,6 +186,7 @@ sub handle_packet {
 			} else {
 				$CODE = "404";
 				$response{'error'} = "Unknown controller";
+				log_entry({level=>"DEBUG",message=>"[$client_address] accessed unknown controller"});
 			}
 
 			my $complete_ms_time = time();
@@ -220,6 +222,7 @@ sub handle_packet {
 	}
 	
 	$response_message = form_http_response({content=>"$return_content",code=>$CODE, content_type=>$headers->{'accept'}});
+	log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$response_message"}) if ($PARAMS eq "debug");
     	# write response data to the connected client
     	$client_socket->send($response_message);
  
@@ -258,9 +261,8 @@ sub form_http_response {
 	my $respbody = $params->{content};
 	my $code = $params->{code};
 	my $content_type = $params->{content_type};
-	$response = HTTP::Response->new($code,'Ok');
-	$response->header( 'Content-type' => $content_type );
-#	$response->header( 'Content-type' => 'application/json' );
+	$response = HTTP::Response->new($code,'HTTP 1.1/Ok');
+	$response->header( 'Content-type' => $content_type || "application/xml");
 	$response->header( 'Cache-control' => 'no-cache, must-revalidate' );	
 	$response->header( 'Content-length' => length($respbody) );
 	$response->header( 'Server' => "McNutter API Command Runner/$VERSION");
@@ -278,8 +280,9 @@ sub status_controller_cb {
 
 	if ($params->{method} eq "GET") {
 		$response->{success} = "true";
-		$response->{response}->{status} = "Service OK"; 
-	
+		$response->{response}->{status} = "Service OK";
+		$uuid = get_uuid({type=>"hostid_mac"});
+		$response->{response}->{uuid} = $uuid;
 	} else {
 		$response->{error} = "Bad method";
 	}
@@ -393,6 +396,11 @@ if ($MODE eq "dump_config") {
 	print Dumper(\%CONFIG);
 }
 
+if ($MODE eq "get_uuid") {
+	$uuid = get_uuid({type=>"hostid_mac"});
+	print "This machines UUID is: $uuid\n\n";
+}
+
 if ($MODE eq "daemon") {
 
 	daemonize();
@@ -455,3 +463,30 @@ sub daemonize {
  }
 
 
+
+
+sub get_uuid {
+
+	my $params = shift;
+
+        my $CPU_ID=`dmidecode -t 4 | grep ID | sed 's/.*ID://;s/ //g'`;
+        #my $Host_ID=`hostid`;
+
+        my $Default_NIC=`route | grep '\^default' | grep -o '[^ ]*\$'`;
+        chomp $Default_NIC;
+        my $Default_NIC_MAC=`ifconfig | grep $Default_NIC | awk '{print \$NF}' | sed 's/://g'`;
+        my $Host_ID=`cat /sys/class/dmi/id/product_uuid`;
+        my $HostID_UUID     = create_uuid(UUID_V3, $Host_ID);
+        my $HostIDNIC_UUID     = create_uuid(UUID_V3, "$Host_ID$Default_NIC_MAC");
+        my $CPUID_UUID  = create_uuid(UUID_V3, $CPU_ID);
+
+        if ($params->{type} eq "cpu") {
+                return uuid_to_string($CPUID_UUID);
+
+        } elsif ($params->{type} eq "hostid_mac") {
+                return uuid_to_string("$HostIDNIC_UUID");
+        } else {
+                return uuid_to_string($HostID_UUID);
+        }
+
+}
