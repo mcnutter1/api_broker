@@ -101,6 +101,21 @@ sub log_entry {
 }
 
 
+sub read_json_file {
+
+	my $json_file = shift;
+        my $json_text = do {
+                open(my $json_fh, "<:encoding(UTF-8)", $json_file) or die("Can't open " . $json_file . ": $!\n");
+                local $/;
+                <$json_fh>
+        };
+
+        my $json = JSON->new;
+        my $data = $json->decode($json_text);
+	return $data;
+}
+
+
 sub load_api_key_db {
 
 	if (-e $API_KEY_DB) {
