@@ -30,6 +30,7 @@ sub truth_or_dare_cb {
 
 	my $actor = $content->{actor};
 
+	my $game_level =$content->{level};
 
 	my $actor_gender = $content->{players}->{player}->{$actor}->{gender};
 	
@@ -50,23 +51,62 @@ sub truth_or_dare_cb {
 
 
 	
+	
 
-	my $random_dare = $dares_array[rand(@dares_array)];
-	my $random_question = $questions_array[rand(@questions_array)];
+	
+
+	## Get Random dares
+	#my $random_dare = $dares_array[rand(@dares_array)];
+	#my $random_question = $questions_array[rand(@questions_array)];
+	my $random_dare = select_random_by_level($game_level, \%dares, $actor_gender);
+	my $random_question = select_random_by_level($game_level, \%questions, $actor_gender);
+
+	
 
 		
 	
-	$response{"dare"} = $actor . ", " . HandleDynamicValue($random_dare,$content);	
 	
+	$response{"dare"} = $actor . ", " . HandleDynamicValue($random_dare,$content);	
 	$response{"question"} = $actor . ", " . HandleDynamicValue($random_question,$content);
 	
 
 	$response{"dare_detail"} = $question_DB->{dares}->{$random_dare};
 	$response{"question_detail"} = $question_DB->{questions}->{$random_question};
 
+
+
 	return \%response;
 }	
 
+
+sub select_random_by_level {
+	
+	my $level = shift;
+	my $question_hashref = shift;
+	my $actor_gender = shift;
+	my $db_level;
+	
+	my @questions_array = keys($question_hashref->{$actor_gender});	
+
+	my $random_question = $questions_array[rand(@questions_array)];
+
+	print Dumper($question_hashref);	
+
+	$db_level = $question_hashref->{$actor_gender}->{$random_question}->{level};
+
+	
+	while ($db_level gt $level) {
+		print "Selected level $db_level while game is set to $level";
+		$random_question = $questions_array[rand(@questions_array)];		
+		$db_level = $question_hashref->{$actor_gender}->{$random_question}->{level};
+		print "Trying Again...";	
+		
+	}
+
+	return $random_question;	
+	print Dumper($question_hashref->{$actor_gender}->{$random_question});
+	
+}
 
 sub sort_players_by_gender {
 
