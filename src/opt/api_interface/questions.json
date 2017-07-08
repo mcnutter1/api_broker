@@ -1,28 +1,251 @@
 {
- "dares":
-    {
-	"take off your pants":
-	{
-		"gender":"either",
-		"level":"5"
-	},
-	
-        "Suck {RMPS}'s dick for 2 minutes":
-        {
-                "gender":"either",
-                "level":"5"
-        },
-
-	"Get {RMPS} to each cum in shot glasses. Mix up the glasses and try and guess who's is who's by doing the shot.":
-        {
-                "gender":"either",
-                "level":"5"
-        }
-	
-
-
-
+  "questions": {
+    "Have you ever had sex while on the phone?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/fuckingonphone.gif"
+    },
+    "Would you do this with someone?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/cumlick.png"
+    },
+    "Do you like anal?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/anal.gif"
+    },
+    "Who's cock was the biggest that you ever saw": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/biggestsucked.png"
+    },
+    "Who would you pick for each person in this picture": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/foursomebi.png"
+    },
+    "Would you rather be top or bottom?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/toporbottom.png"
+    },
+    "WWho would you pick to do this.": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/whostheguy.png"
+    },
+    "Where do you perfer cum on you?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/wheredoyouprefercum.png"
+    },
+    "Would you do this with {RMP}?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/femdom.gif"
+    },
+    "If you had to suck one, black or white?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/blackvswhite.png"
+    },
+    "Have you ever come home with cum in your panties?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/cuminpanties.jpg"
+    },
+    "Which one would you choose?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/whichone2.jpg"
+    },
+    "Have you ever sucked a black cock?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/eversuckblack.png"
+    },
+    "Would you do this?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/wouldyou.png"
+    },
+    "Have you ever done this?": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/cheatingphone.gif"
+    },
+    "Describe the panties you are wearing": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/gstring.png"
+    },
+    "Have you ever had sex in a public bathroom?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/sexinbathroom.gif"
+    },
+    "Which would you prefer, left or right": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/bigvslittle.png"
+    },
+    "Would you snowball with another girl?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/wouldyousnowball.gif"
+    },
+    "Who would you rather be?": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/whowouldyouratherbe.png"
     }
+  },
+  "dares": {
+    "Take off your pants (or skirt) for the rest of the game.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/dresslift.gif"
+    },
+    "Give {RMP} a lap dance naked.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/lapdancenaked.gif"
+    },
+    "Give {RMP} a lapdance in just your panties": {
+      "gender": "f",
+      "level": "4",
+      "image": "http://192.168.254.126:83/main/lapdanceinpanties.png"
+    },
+    "Measure your dick and send a picture to {RFP}": {
+      "gender": "m",
+      "level": "3",
+      "image": "http://192.168.254.126:83/main/selfmeasuresmall.png"
+    },
+    "Take a selfie of your abs and send to {RFP}": {
+      "gender": "m",
+      "level": "2",
+      "image": "http://192.168.254.126:83/main/guyselfieabs.png"
+    },
+    "Flash your tits to the group": {
+      "gender": "f",
+      "level": "3",
+      "image": "http://192.168.254.126:83/main/flashtits.png"
+    },
+    "Get {RFP} to stand behind you with his cock between your legs until your next turn.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/standingbehindcock.png"
+    },
+    "Take a fully nude selfie and send it to {RFP}": {
+      "gender": "m",
+      "level": "42",
+      "image": "http://192.168.254.126:83/main/guynakedselfie.png"
+    },
+    "Let {RFP} measure your dick in front of the group": {
+      "gender": "m",
+      "level": "4",
+      "image": "http://192.168.254.126:83/main/girlmeasuresmall.png"
+    },
+    "Measure {RMP}'s dick in front of the group.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/girlmeasuringbig.png"
+    },
+    "Allow {RMP} to rub his cock on your underwear.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/rubcockonpanties.gif"
+    },
+    "Allow {RMP} to lick your pussy until your next turn": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/eatout.jpg"
+    },
+    "Suck {RMP2}'s dick for 2 minutes": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/suckingtwo.png"
+    },
+    "Take a shower with {RMP2}": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/takeshower.png"
+    },
+    "Sit on top of {RMP}'s cock with no pants on for the next turn": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/sitontopofdick.png"
+    },
+    "Sit on top of {RMP}'s face in your panties until your next turn.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/sitonface.png"
+    },
+    "Sit on {RMP}'s lap, both of you with no pants on for two turns.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/sitonlapnopants.png"
+    },
+    "Suck {RMP}'s dick for 2 minutes": {
+      "gender": "either",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/blow.png"
+    },
+    "Get {RMPS} to each cum in shot glasses. Mix up the glasses and try and guess who's is who's by doing the shot.": {
+      "gender": "f",
+      "level": "5",
+      "image": "https://s3.amazonaws.com/tordtest/cumshot.jpg"
+    },
+    "Swap underwear with {RFP}, you may do the swap privately.": {
+      "gender": "m",
+      "level": "3",
+      "image": "http://192.168.254.126:83/main/guypanties.png"
+    },
+    "Get {RFP}'s panties and only wear them for the rest of the game.": {
+      "gender": "m",
+      "level": "4",
+      "image": "http://192.168.254.126:83/main/dickthong.jpg"
+    },
+    "Take a picture of down your pants or up your skirt and send it to {RMPS}": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/selfiepussy.png"
+    },
+    "Moon the group": {
+      "gender": "f",
+      "level": "3",
+      "image": "http://192.168.254.126:83/main/buttflash.png"
+    },
+    "Flash your pussy to {RMP}": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/titspussyselfie.png"
+    },
+    "Allow {RMP} to cum in your underwear and then wear them.": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/cumthong.png"
+    },
+    "Take a selfie holding {RMP}'s dick": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/holdingblack.png"
+    },
+    "Have someone take a picture of you holding {RMP2}'s dicks": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/holdingtwo.png"
+    },
+    "Pull {RMP}'s pants and underwear down in front of the group": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/pulldickout.gif"
+    },
+    "Give a handjob to {RMP} until your next turn": {
+      "gender": "f",
+      "level": "5",
+      "image": "http://192.168.254.126:83/main/handjob.gif"
+    }
+  }
 }
-
-

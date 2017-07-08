@@ -160,6 +160,7 @@ sub handle_packet {
 		log_entry({level=>"INFO",message=>"[$client_address] client connected, source port: $client_port"});
  
     		my $data = "";
+		my $xml = "";
 		my $XML = "";
 		my $JSON = "";
 		my $CODE = "";
@@ -173,6 +174,9 @@ sub handle_packet {
 	
 
 		log_entry({level=>"INFO",message=>"[$client_address] client accessed $path"});
+		print $method;
+
+
 
 		if ($method eq "GET" || $method eq "POST") {
 
@@ -183,7 +187,7 @@ sub handle_packet {
 				log_entry({level=>"DEBUG",message=>"[$client_address] matched controller for $path"}) if ($PARAMS eq "debug"); 
 
 				my $payload_hash = parse_payload({payload=>$content,client_address=>$client_address,content_type=>$headers->{'content-type'}}); 
-				my $controller = $CONTROLLERS_CB->{$path}->({client_address=>$client_address, method=>$method, body=>$content}) if $CONTROLLERS_CB->{$path};
+				my $controller = $CONTROLLERS_CB->{$path}->({client_address=>$client_address, method=>$method, body=>$content, content_type=>$headers->{'content-type'}}) if $CONTROLLERS_CB->{$path};
 			
 				if ($controller->{success}) {
 
@@ -214,7 +218,10 @@ sub handle_packet {
 			log_entry({level=>"DEBUG",message=>"[$client_address] sent response: \n$xml"}) if ($PARAMS eq "debug");
                         $data = $data . $xml;
 		
-
+		} elsif ($method eq "OPTIONS") {
+			$CODE = "200";
+			
+						
 		} else {
 			log_entry({level=>"CLIENT_ERROR",message=>"[$client_address] used unsupported method"});
 			$response{error} = "unsupported method";
@@ -229,7 +236,7 @@ sub handle_packet {
 	
 
 	my $return_content;
-	if (content_type=>$headers->{'accept'} eq "application/json") {
+	if (content_type=>$headers->{'accept'}  =~ m/json/) {
 
 		$return_content = $JSON;
 	} else {
@@ -276,11 +283,20 @@ sub form_http_response {
 	my $respbody = $params->{content};
 	my $code = $params->{code};
 	my $content_type = $params->{content_type};
-	$response = HTTP::Response->new($code,'HTTP 1.1/Ok');
-	$response->header( 'Content-type' => $content_type || "application/xml");
-	$response->header( 'Cache-control' => 'no-cache, must-revalidate' );	
+	
+	$response = HTTP::Response->new('200',"HTTP/1.0 OK");
+	#$response = HTTP::Response->new($code,'Ok');
+	$response->header('Access-Control-Allow-Origin' => '*');
+	#$response->header('Access-Control-Allow-Methods' => 'GET, POST, OPTIONS');
+	#$response->header('Access-Control-Allow-Headers' => 'X-Requested-With');
+#	$response->header( 'Content-type' => $content_type || "application/xml");
+	#$response->header( 'Cache-control' => 'no-cache, must-revalidate' );	
 	$response->header( 'Content-length' => length($respbody) );
+	$response->header( 'Content-type' => $content_type || "application/xml");
 	$response->header( 'Server' => "McNutter API Command Runner/$VERSION");
+	$response->header( 'Connection' => "keep-alive");
+	$response->header( 'Date' => "Tue, 04 Jul 2017 03:51:21 GMT");
+	$response->header( 'Last-Modified' => "Tue, 04 Jul 2017 03:07:21 GMT");
 	$response->content($respbody);
 
 	return $response->as_string;
@@ -312,7 +328,14 @@ sub request_controller_cb {
 
 	my $response;
 	if ($params->{body} && $params->{method} eq "POST") {
-                                my $hashref = XMLin($params->{body});
+				
+				
+				my $hashref;
+				my $json = JSON->new;
+                                $hashref = XMLin($params->{body}) if ($params->{content_type} =~ m/xml/);
+				$hashref = $json->decode($params->{body}) if ($params->{content_type} =~ m/json/);
+			
+				print Dumper($hashref);
                                 my $request_api_key = $hashref->{authentication}->{apikey};
                                 if ($API_KEYS{$request_api_key}) {
 
