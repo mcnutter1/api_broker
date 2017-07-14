@@ -9,6 +9,7 @@ main::activate_plugin({name=>$_PLUGIN_NAME, initiator=>$_INITIATOR, call_back=>$
 
 
 my $question_DB;
+my %used_questions;
 
 sub load_questions {
 
@@ -30,10 +31,17 @@ sub truth_or_dare_cb {
 
 	my $actor = $content->{actor};
 
-	my $game_level =$content->{level};
+	my $game_level =$content->{game_options}->{game_level} || 5;
 
 	my $actor_gender = $content->{players}->{player}->{$actor}->{gender};
 	
+	my $game_token = $content->{game_token};
+
+	my $last_question = $content->{last_question};
+
+	$used_questions{$game_token}{$last_question} = true if $last_question ne "";
+	
+	print $game_token;	
 
 
 	return unless $actor_gender;
@@ -49,21 +57,30 @@ sub truth_or_dare_cb {
 	my %questions = %{sort_questions_by_gender($question_DB->{questions})};
         my @questions_array = keys($questions{$actor_gender});
 
-
-	
-	
-
 	
 
 	## Get Random dares
 	#my $random_dare = $dares_array[rand(@dares_array)];
 	#my $random_question = $questions_array[rand(@questions_array)];
-	my $random_dare = select_random_by_level($game_level, \%dares, $actor_gender);
-	my $random_question = select_random_by_level($game_level, \%questions, $actor_gender);
+	my $random_dare;
+	my $random_question;
+	$random_dare = select_random_by_level($game_level, \%dares, $actor_gender);
+	$random_question = select_random_by_level($game_level, \%questions, $actor_gender);
 
-	
 
-		
+	print "Hit Random\n\n"	if ($used_questions{"$game_token"}{"$random_dare"} eq 'true');
+	print "Hit Random\n\n"  if ($used_questions{"$game_token"}{"$random_question"} eq 'true');
+	while ($used_questions{$game_token}{$random_dare} eq 'true') {
+		print "Hit used dare, retrying";
+		$random_dare = select_random_by_level($game_level, \%dares, $actor_gender);
+	}	
+
+
+
+	while ($used_questions{$game_token}{$random_question} eq 'true') {
+                print "Hit used dare, retrying";
+                $random_question = select_random_by_level($game_level, \%questions, $actor_gender);
+        }		
 	
 	
 	$response{"dare"} = $actor . ", " . HandleDynamicValue($random_dare,$content);	
@@ -73,7 +90,10 @@ sub truth_or_dare_cb {
 	$response{"dare_detail"} = $question_DB->{dares}->{$random_dare};
 	$response{"question_detail"} = $question_DB->{questions}->{$random_question};
 
+#	$used_questions{$game_token}{$response{"dare"}} = true;
+#	$used_questions{$game_token}{$response{"question"}} = true;
 
+#	print Dumper(\%used_questions);
 
 	return \%response;
 }	
@@ -90,7 +110,6 @@ sub select_random_by_level {
 
 	my $random_question = $questions_array[rand(@questions_array)];
 
-	print Dumper($question_hashref);	
 
 	$db_level = $question_hashref->{$actor_gender}->{$random_question}->{level};
 
@@ -104,7 +123,6 @@ sub select_random_by_level {
 	}
 
 	return $random_question;	
-	print Dumper($question_hashref->{$actor_gender}->{$random_question});
 	
 }
 
@@ -195,7 +213,7 @@ sub _handle_variable {
 
 		@male_array = @{$gender_list->{m}};
                 $total_of_gender = scalar(@male_array);
-
+		print Dumper(\@male_array);
                 my $random_total = rand($total_of_gender );
 
                 $i = 0;
@@ -207,12 +225,12 @@ sub _handle_variable {
                         $final_string .= "$male_array[$i]";
                         if ($random_total > 2 && ($random_total - $i) > 1) {
 
-                        $final_string .= ", ";
+                 	       $final_string .= ", ";
                         }
                         $i++;
                 }
 
-                print $final_string .= " and $male_array[$random_total]";
+                $final_string .= " and $male_array[$digit]";
 
                 print $final_string;
                 $random_male = $male_array[rand @male_array];
